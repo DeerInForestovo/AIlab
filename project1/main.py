@@ -224,6 +224,13 @@ class SearchNode(object):
 
 # don't change the class name
 class AI(object):
+
+    """
+    这份代码在对局前期考虑下一步让对手的选择数量最少（对棋盘进行了一定的估值来修正胜率），
+    中后期用蒙特卡洛树搜索和棋盘估值修正估算每个位置的胜率，可惜最终表现效果并不好，仅供参考
+    在课程中的成绩为 13.9/15，rank14
+    """
+
     def __init__(self, chessboard_size, color, time_out):
         # self.chessboard_size = chessboard_size
         self.color = color
