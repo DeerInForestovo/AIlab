@@ -3,10 +3,19 @@ import copy
 import numpy as np
 import sys
 import time
-import pandas as pd
 import random
 
 TEST_MODE = 0
+
+
+def read_int(string, begin):
+    p = 0
+    while not str(string[begin]).isdigit():
+        begin += 1
+    while str(string[begin]).isdigit():
+        p = p * 10 + int(string[begin])
+        begin += 1
+    return p, begin
 
 
 class CarpProblem:
@@ -30,21 +39,24 @@ class CarpProblem:
         self.test_name = read_table['NAME ']
         self.total_cost = int(read_table['TOTAL COST OF REQUIRED EDGES '])
         self.edge = self.req_edge + self.free_edge
-        read_edges = pd.read_csv(file, sep="\s+", skiprows=1, skipfooter=1, names=['1', '2', '3', '4']
-                                 , engine='python').values
-        file.close()
+        file.readline()
         self.distance = [[self.total_cost for _ in range(self.node)] for _ in range(self.node)]
         for i in range(self.node):
             self.distance[i][i] = 0
         self.task = []
         for i in range(self.edge):
-            u, v, c, d = read_edges[i]
+            string = file.readline() + '\0'
+            u, begin = read_int(string, 0)
+            v, begin = read_int(string, begin)
+            c, begin = read_int(string, begin)
+            d, _ = read_int(string, begin)
             u -= 1
             v -= 1
             self.distance[u][v] = self.distance[v][u] = c
             if d:
                 self.task.append((int(u), int(v), int(d)))
         assert len(self.task) == self.req_edge
+        file.close()
 
         # Floyd
         for k in range(self.node):
@@ -273,7 +285,7 @@ class CarpProblem:
             phase_time = time.time() - phase_begin_time
             phase_num += 1
             if TEST_MODE:
-                print("phase %d, time %f, best time %d\n" % (phase_num, phase_time, population[0][1]))
+                print("phase %d, time %f, best time %d" % (phase_num, phase_time, population[0][1]))
         # output
         best_individual = self.best_n_individual(population, 1)[0]
         plan_output = ''
