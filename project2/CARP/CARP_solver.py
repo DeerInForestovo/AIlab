@@ -1,5 +1,4 @@
 import copy
-
 import numpy as np
 import sys
 import time
@@ -16,6 +15,17 @@ def read_int(string, begin):
         p = p * 10 + int(string[begin])
         begin += 1
     return p, begin
+
+
+def best_n_individual(population, n):  # fitness = -cost
+    return sorted(population, key=lambda x: x[1])[:n]
+
+
+def total_length(individual):  # only for testing
+    length = 0
+    for route in individual[0]:
+        length += len(route)
+    return length
 
 
 class CarpProblem:
@@ -37,10 +47,11 @@ class CarpProblem:
         self.capacity = int(read_table['CAPACITY '])
         self.depot = int(read_table['DEPOT ']) - 1
         self.test_name = read_table['NAME ']
-        self.total_cost = int(read_table['TOTAL COST OF REQUIRED EDGES '])
+        self.total_req_cost = int(read_table['TOTAL COST OF REQUIRED EDGES '])
+        self.total_cost = 0
         self.edge = self.req_edge + self.free_edge
         file.readline()
-        self.distance = [[self.total_cost for _ in range(self.node)] for _ in range(self.node)]
+        self.distance = [[-1 for _ in range(self.node)] for _ in range(self.node)]
         for i in range(self.node):
             self.distance[i][i] = 0
         self.task = []
@@ -52,6 +63,8 @@ class CarpProblem:
             d, _ = read_int(string, begin)
             u -= 1
             v -= 1
+            self.total_cost += c
+            assert 0 <= u < self.node and 0 <= v < self.node
             self.distance[u][v] = self.distance[v][u] = c
             if d:
                 self.task.append((int(u), int(v), int(d)))
@@ -59,10 +72,19 @@ class CarpProblem:
         file.close()
 
         # Floyd
+        for i in range(self.node):
+            for j in range(self.node):
+                if self.distance[i][j] == -1:
+                    self.distance[i][j] = self.total_cost
         for k in range(self.node):
             for i in range(self.node):
                 for j in range(self.node):
                     self.distance[i][j] = min(self.distance[i][j], self.distance[i][k] + self.distance[k][j])
+        if TEST_MODE:
+            for i in range(self.node):
+                for j in range(self.node):
+                    assert self.distance[i][j] == self.distance[j][i]
+
     """
         parameters:
         self.time_limit: time limit
@@ -126,13 +148,13 @@ class CarpProblem:
     def calc_cost(self, individual):  # only used for testing
         cost = 0
         for route in individual[0]:
-            len_route = len(route)
-            for i in range(len_route):
-                if i:
-                    cost += self.distance[route[i - 1][1]][route[i][0]]
-                cost += self.distance[route[i][0]][route[i][1]]
-            cost += self.distance[self.depot][route[0][0]] + self.distance[route[-1][1]][self.depot]
-        return cost
+            for i in range(len(route)):
+                # cost += self.distance[route[i - 1][1]][route[i][0]] +\
+                #         self.distance[route[i][0]][route[i][1]]
+                cost += self.distance[route[i - 1][1]][route[i][0]]
+        # return cost
+        return cost + self.total_req_cost
+        # Commented method is wrong. Demanded edge (u, v) may be longer than distance[u][v].
 
     """
         5 mutations:
@@ -229,7 +251,6 @@ class CarpProblem:
         STRATEGY_NUM = 5
         for i in range(pop_size):
             routes = []
-            cost = 0
             task_now = copy.deepcopy(self.task)
             random.shuffle(task_now)
             for j in range(self.req_edge):
@@ -242,24 +263,19 @@ class CarpProblem:
                 while True:
                     best_pos = self.strategy(cap_now, task_now, pos_now, i % STRATEGY_NUM)
                     if best_pos == -1:
-                        cost += self.distance[route[-1][1]][self.depot]  # the end point of the last task
                         break
                     best_task = task_now.pop(best_pos)
                     route.append(best_task)
-                    cost += self.distance[pos_now][best_task[0]] + self.distance[best_task[0]][best_task[1]]
                     cap_now += best_task[2]
                     pos_now = best_task[1]
                 routes.append(route)
             if len(task_now) == 0:
-                population.append((routes, cost))
+                population.append((routes, self.calc_cost((routes, 0))))
         return population
-
-    def best_n_individual(self, population, n):  # fitness = -cost
-        return sorted(population, key=lambda x: x[1])[:n]
 
     def main(self):  # solve the problem
         # init population
-        pop_size = max(1000, min(10, int(1000000 / self.node)))  # need a better number here
+        pop_size = max(100, min(10, int(100000 / self.node)))  # need a better number here
         population = self.init_population(pop_size)
         if TEST_MODE:
             print("init_population in %f s" % (time.time() - self.begin_time))
@@ -272,6 +288,9 @@ class CarpProblem:
                     if self.calc_cost(individual) != individual[1]:
                         print("wrong cost")
                         print(individual)
+                    if total_length(individual) != self.car + self.req_edge:
+                        print("wrong task number")
+                        print(individual)
             # generate new population
             new_population = [] + population
             for individual in population:
@@ -281,13 +300,13 @@ class CarpProblem:
                     if new_individual is not None:
                         new_population.append(new_individual)
             # replace
-            population = self.best_n_individual(new_population, pop_size)
+            population = best_n_individual(new_population, pop_size)
             phase_time = time.time() - phase_begin_time
             phase_num += 1
             if TEST_MODE:
-                print("phase %d, time %f, best time %d" % (phase_num, phase_time, population[0][1]))
+                print("phase %d, time %f, best cost %d" % (phase_num, phase_time, population[0][1]))
         # output
-        best_individual = self.best_n_individual(population, 1)[0]
+        best_individual = best_n_individual(population, 1)[0]
         plan_output = ''
         for route in best_individual[0]:
             if len(plan_output):
