@@ -33,7 +33,7 @@ class CarpProblem:
         # input
         self.begin_time = time.time()
         file = open(argv[0], 'r')
-        self.time_limit = self.begin_time + (int(argv[2]) - 0.1)
+        self.time_limit = self.begin_time + (int(argv[2]) - 0.8)
         self.random_seed = argv[4]
         read_table = dict()
         for i in range(8):
@@ -43,7 +43,8 @@ class CarpProblem:
         self.req_edge = int(read_table['REQUIRED EDGES '])
         self.free_edge = int(read_table['NON-REQUIRED EDGES '])
         self.node = int(read_table['VERTICES '])
-        self.car = int(read_table['VEHICLES '])
+        # self.car = int(read_table['VEHICLES '])
+        self.car = self.req_edge  # change the number of vehicles to INF due to the teacher's requirement
         self.capacity = int(read_table['CAPACITY '])
         self.depot = int(read_table['DEPOT ']) - 1
         self.test_name = read_table['NAME ']
@@ -81,9 +82,7 @@ class CarpProblem:
                 for j in range(self.node):
                     self.distance[i][j] = min(self.distance[i][j], self.distance[i][k] + self.distance[k][j])
         if TEST_MODE:
-            for i in range(self.node):
-                for j in range(self.node):
-                    assert self.distance[i][j] == self.distance[j][i]
+            print("init time %f s" % (time.time() - self.begin_time))
 
     """
         parameters:
@@ -149,12 +148,13 @@ class CarpProblem:
         cost = 0
         for route in individual[0]:
             for i in range(len(route)):
+                # DON'T DELETE THIS COMMENT
                 # cost += self.distance[route[i - 1][1]][route[i][0]] +\
                 #         self.distance[route[i][0]][route[i][1]]
                 cost += self.distance[route[i - 1][1]][route[i][0]]
         # return cost
         return cost + self.total_req_cost
-        # Commented method is wrong. Demanded edge (u, v) may be longer than distance[u][v].
+        # Commented method is WRONG!!! Demanded edge (u, v) may be longer than distance[u][v].
 
     """
         5 mutations:
@@ -198,15 +198,15 @@ class CarpProblem:
             if b + 1 == len(routes[a]) or a == c:
                 mutation_id = 2  # the next task is init_task or inserted to wrong positions
             else:
-                cost -= self.cost_left(routes, a, b) +\
-                        self.cost_right(routes, a, b + 1) +\
+                cost -= self.cost_left(routes, a, b) + \
+                        self.cost_right(routes, a, b + 1) + \
                         self.cost_right(routes, c, d)
                 task_a1 = routes[a].pop(b)
                 task_a2 = routes[a].pop(b)
                 routes[c].insert(d + 1, task_a2)
                 routes[c].insert(d + 1, task_a1)
-                cost += self.cost_right(routes, a, b - 1) +\
-                        self.cost_left(routes, c, d + 1) +\
+                cost += self.cost_right(routes, a, b - 1) + \
+                        self.cost_left(routes, c, d + 1) + \
                         self.cost_right(routes, c, d + 2)
                 if self.route_test_failed(routes[a]) or self.route_test_failed(routes[c]):
                     return None
@@ -216,11 +216,11 @@ class CarpProblem:
             if b + 1 == len(routes[a]) or a == c:
                 mutation_id = 3  # the next task is init_task or inserted to wrong positions
             else:
-                cost -= self.cost_both(routes, a, b) +\
+                cost -= self.cost_both(routes, a, b) + \
                         self.cost_right(routes, c, d)
                 task_a = routes[a].pop(b)
                 routes[c].insert(d + 1, task_a)
-                cost += self.cost_right(routes, a, b - 1) +\
+                cost += self.cost_right(routes, a, b - 1) + \
                         self.cost_both(routes, c, d + 1)
                 if self.route_test_failed(routes[a]) or self.route_test_failed(routes[c]):
                     return None
@@ -228,14 +228,14 @@ class CarpProblem:
             a, b = self.random_task(routes)
             c, d = self.random_task(routes)
             if a != c:
-                cost -= self.cost_both(routes, a, b) +\
+                cost -= self.cost_both(routes, a, b) + \
                         self.cost_both(routes, c, d)
                 routes[a][b], routes[c][d] = routes[c][d], routes[a][b]
-                cost += self.cost_both(routes, a, b) +\
+                cost += self.cost_both(routes, a, b) + \
                         self.cost_both(routes, c, d)
                 if self.route_test_failed(routes[a]) or self.route_test_failed(routes[c]):
                     return None
-        if mutation_id == 4:
+        if mutation_id == 4:  #
             pass
         return routes, cost
 
@@ -274,42 +274,74 @@ class CarpProblem:
         return population
 
     def main(self):  # solve the problem
-        # init population
-        pop_size = max(100, min(10, int(100000 / self.node)))  # need a better number here
-        population = self.init_population(pop_size)
-        if TEST_MODE:
-            print("init_population in %f s" % (time.time() - self.begin_time))
         phase_num = 0
         phase_time = 0
-        while time.time() + phase_time < self.time_limit:
-            phase_begin_time = time.time()
+        init_time = 0
+        round_cnt = 0
+        best_individual = None
+        while time.time() + init_time < self.time_limit:
+            # init population
+            init_begin_time = time.time()
+            pop_size = max(100, min(10, int(10000 / self.node)))  # need a better number here
+            population = self.init_population(pop_size)  # init population
+            init_time = time.time() - init_begin_time
+            cost_history = []
             if TEST_MODE:
+                round_cnt += 1
+                print("%d round begin here." % round_cnt)
+                print("init_population in %f s" % init_time)
+
+            # evolution
+            while time.time() + phase_time < self.time_limit:
+                phase_begin_time = time.time()
+                if TEST_MODE:
+                    for individual in population:
+                        if self.calc_cost(individual) != individual[1]:
+                            print("wrong cost")
+                            print(individual)
+                        if total_length(individual) != self.car + self.req_edge:
+                            print("wrong task number")
+                            print(individual)
+
+                # generate new population
+                new_population = [] + population
                 for individual in population:
-                    if self.calc_cost(individual) != individual[1]:
-                        print("wrong cost")
-                        print(individual)
-                    if total_length(individual) != self.car + self.req_edge:
-                        print("wrong task number")
-                        print(individual)
-            # generate new population
-            new_population = [] + population
-            for individual in population:
-                MUTATION_NUM = 5
-                for i in range(MUTATION_NUM):
-                    new_individual = self.mutation(individual, i)
-                    if new_individual is not None:
-                        new_population.append(new_individual)
-            # replace
-            population = best_n_individual(new_population, pop_size)
-            phase_time = time.time() - phase_begin_time
-            phase_num += 1
-            if TEST_MODE:
-                print("phase %d, time %f, best cost %d" % (phase_num, phase_time, population[0][1]))
+                    MUTATION_NUM = 5
+                    for i in range(MUTATION_NUM):
+                        new_individual = self.mutation(individual, i)
+                        if new_individual is not None:
+                            new_population.append(new_individual)
+
+                # replace
+                population = best_n_individual(new_population, pop_size)
+                best_cost = int(population[0][1])
+                cost_history.append(best_cost)
+
+                # phase time calc
+                phase_time = time.time() - phase_begin_time
+                phase_num += 1
+                if TEST_MODE:
+                    print("phase %d, time %f, best cost %d" % (phase_num, phase_time, population[0][1]))
+
+                # if evolution ends, generate a new population
+                if len(cost_history) > pop_size//2 and best_cost == cost_history[-(pop_size//2)]:
+                    if TEST_MODE:
+                        print("cost history:")
+                        print(cost_history)
+                        print("go to next population")
+                    break
+
+            # update the answer
+            best_individual_this_round = population[0]
+            if best_individual is None or best_individual[1] > best_individual_this_round[1]:
+                best_individual = best_individual_this_round
+
         # output
-        best_individual = best_n_individual(population, 1)[0]
         plan_output = ''
         for route in best_individual[0]:
-            if len(plan_output):
+            if len(route) == 1:
+                continue
+            if len(plan_output) != 0:
                 plan_output += ','
             plan_output += '0'
             for task in route[1:]:
