@@ -4,7 +4,7 @@ import sys
 import time
 import random
 
-TEST_MODE = 1
+TEST_MODE = 0
 
 
 def read_int(string, begin):
@@ -255,7 +255,25 @@ class CarpProblem:
                 if self.route_test_failed(routes[a]) or self.route_test_failed(routes[c]):
                     return None
         if mutation_id == 5:  # 2-opt for double route (plan 2)
-            pass
+            a, b = self.random_task(routes)
+            c, d = self.random_task(routes)
+            if a == c:
+                mutation_id = 6
+            else:
+                cost -= self.cost_left(routes, a, b) + \
+                        self.cost_right(routes, c, d)
+                for i in range(b, len(routes[a])):
+                    routes[a][i] = triple_flip(routes[a][i])
+                for i in range(1, d+1):
+                    routes[c][i] = triple_flip(routes[c][i])
+                len_a = len(routes[a])
+                routes[a], routes[c] = \
+                    routes[a][:b] + routes[c][d:0:-1], \
+                    [routes[c][0]] + routes[a][:b-1:-1] + routes[c][d+1:]
+                cost += self.cost_right(routes, a, b - 1) + \
+                        self.cost_right(routes, c, len_a - b)
+                if self.route_test_failed(routes[a]) or self.route_test_failed(routes[c]):
+                    return None
         if mutation_id == 6:  # 2-opt for single route (segment reverse)
             a, b = self.random_task(routes)
             c = np.random.randint(len(routes[a]) - 1) + 1
