@@ -4,7 +4,7 @@ import sys
 import time
 import random
 
-TEST_MODE = 0
+TEST_MODE = 1
 
 
 def read_int(string, begin):
@@ -28,12 +28,16 @@ def total_length(individual):  # only for testing
     return length
 
 
+def triple_flip(a):  # (p, q, r) <- (q, p, r)
+    return a[1], a[0], a[2]
+
+
 class CarpProblem:
     def __init__(self, argv):
         # input
         self.begin_time = time.time()
         file = open(argv[0], 'r')
-        self.time_limit = self.begin_time + (int(argv[2]) - 0.8)
+        self.time_limit = self.begin_time + (int(argv[2]) - 2)
         self.random_seed = argv[4]
         read_table = dict()
         for i in range(8):
@@ -44,7 +48,7 @@ class CarpProblem:
         self.free_edge = int(read_table['NON-REQUIRED EDGES '])
         self.node = int(read_table['VERTICES '])
         # self.car = int(read_table['VEHICLES '])
-        self.car = self.req_edge  # change the number of vehicles to INF due to the teacher's requirement
+        self.car = self.req_edge  # change the number of vehicles to +INF due to the teacher's requirement
         self.capacity = int(read_table['CAPACITY '])
         self.depot = int(read_table['DEPOT ']) - 1
         self.test_name = read_table['NAME ']
@@ -190,7 +194,7 @@ class CarpProblem:
         if mutation_id == 0:  # flip
             a, b = self.random_task(routes)
             cost -= self.cost_both(routes, a, b)
-            routes[a][b] = (routes[a][b][1], routes[a][b][0], routes[a][b][2])
+            routes[a][b] = triple_flip(routes[a][b])
             cost += self.cost_both(routes, a, b)
         if mutation_id == 1:  # double insertion
             a, b = self.random_task(routes)
@@ -227,7 +231,9 @@ class CarpProblem:
         if mutation_id == 3:  # swap
             a, b = self.random_task(routes)
             c, d = self.random_task(routes)
-            if a != c:
+            if a == c:
+                mutation_id = 4
+            else:
                 cost -= self.cost_both(routes, a, b) + \
                         self.cost_both(routes, c, d)
                 routes[a][b], routes[c][d] = routes[c][d], routes[a][b]
@@ -235,8 +241,33 @@ class CarpProblem:
                         self.cost_both(routes, c, d)
                 if self.route_test_failed(routes[a]) or self.route_test_failed(routes[c]):
                     return None
-        if mutation_id == 4:  #
+        if mutation_id == 4:  # 2-opt for double route (plan 1)
+            a, b = self.random_task(routes)
+            c, d = self.random_task(routes)
+            if a == c:
+                mutation_id = 5
+            else:
+                cost -= self.cost_left(routes, a, b) + \
+                        self.cost_left(routes, c, d)
+                routes[a], routes[c] = routes[a][:b] + routes[c][d:], routes[c][:d] + routes[a][b:]
+                cost += self.cost_right(routes, a, b - 1) + \
+                        self.cost_right(routes, c, d - 1)
+                if self.route_test_failed(routes[a]) or self.route_test_failed(routes[c]):
+                    return None
+        if mutation_id == 5:  # 2-opt for double route (plan 2)
             pass
+        if mutation_id == 6:  # 2-opt for single route (segment reverse)
+            a, b = self.random_task(routes)
+            c = np.random.randint(len(routes[a]) - 1) + 1
+            if b > c:
+                b, c = c, b
+            cost -= self.cost_left(routes, a, b) + \
+                    self.cost_right(routes, a, c)
+            routes[a][b:c+1] = routes[a][c:b-1:-1]  # segment reverse
+            for i in range(b, c + 1):
+                routes[a][i] = triple_flip(routes[a][i])
+            cost += self.cost_left(routes, a, b) + \
+                    self.cost_right(routes, a, c)
         return routes, cost
 
     """
@@ -255,7 +286,7 @@ class CarpProblem:
             random.shuffle(task_now)
             for j in range(self.req_edge):
                 if np.random.randint(2):
-                    task_now[j] = (task_now[j][1], task_now[j][0], task_now[j][2])
+                    task_now[j] = triple_flip(task_now[j])
             for j in range(self.car):
                 route = [(self.depot, self.depot, 0)]
                 cap_now = 0
@@ -306,7 +337,7 @@ class CarpProblem:
                 # generate new population
                 new_population = [] + population
                 for individual in population:
-                    MUTATION_NUM = 5
+                    MUTATION_NUM = 8
                     for i in range(MUTATION_NUM):
                         new_individual = self.mutation(individual, i)
                         if new_individual is not None:
@@ -357,3 +388,4 @@ if __name__ == "__main__":
         example test:
         python CARP_solver.py sample0.dat -t 5 -s 0
     """
+
