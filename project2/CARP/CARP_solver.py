@@ -4,7 +4,7 @@ import sys
 import time
 import random
 
-TEST_MODE = 0
+TEST_MODE = 1
 
 
 def read_int(string, begin):
@@ -59,7 +59,7 @@ class CarpProblem:
         self.distance = [[-1 for _ in range(self.node)] for _ in range(self.node)]
         for i in range(self.node):
             self.distance[i][i] = 0
-        self.task = []
+        self.task = [(self.depot, self.depot, 0)]
         for i in range(self.edge):
             string = file.readline() + '\0'
             u, begin = read_int(string, 0)
@@ -69,11 +69,13 @@ class CarpProblem:
             u -= 1
             v -= 1
             self.total_cost += c
-            assert 0 <= u < self.node and 0 <= v < self.node
+            if TEST_MODE:
+                assert 0 <= u < self.node and 0 <= v < self.node
             self.distance[u][v] = self.distance[v][u] = c
             if d:
                 self.task.append((int(u), int(v), int(d)))
-        assert len(self.task) == self.req_edge
+        if TEST_MODE:
+            assert len(self.task) == self.req_edge + 1
         file.close()
 
         # Floyd
@@ -112,26 +114,29 @@ class CarpProblem:
         5) use rule 1) if the vehicle is less than half- full, otherwise use rule 2) 
     """
 
+    def get_task(self, id):
+        return self.task[id] if id >= 0 else (self.task[-id][1], self.task[-id][0], self.task[-id][2])
+
     def strategy(self, cap_now, task_now, pos_now, strategy_id):
         best_pos = -1
         if strategy_id == 0:
             max_dist = -1
             for i, this_task in enumerate(task_now):
-                u, v, d = this_task
+                u, v, d = self.get_task(this_task)
                 if cap_now + d <= self.capacity and (max_dist < self.distance[self.depot][u] or best_pos == -1):
                     max_dist = self.distance[self.depot][u]
                     best_pos = i
         if strategy_id == 1:
             min_dist = -1
             for i, this_task in enumerate(task_now):
-                u, v, d = this_task
+                u, v, d = self.get_task(this_task)
                 if cap_now + d <= self.capacity and (min_dist > self.distance[self.depot][u] or best_pos == -1):
                     min_dist = self.distance[self.depot][u]
                     best_pos = i
         if strategy_id == 2:
             max_ratio = -1
             for i, this_task in enumerate(task_now):
-                u, v, d = this_task
+                u, v, d = self.get_task(this_task)
                 sc = self.distance[pos_now][u] + self.distance[u][v]
                 if cap_now + d <= self.capacity and (max_ratio < d / sc or best_pos == -1):
                     max_ratio = d / sc
@@ -139,7 +144,7 @@ class CarpProblem:
         if strategy_id == 3:
             min_ratio = -1
             for i, this_task in enumerate(task_now):
-                u, v, d = this_task
+                u, v, d = self.get_task(this_task)
                 sc = self.distance[pos_now][u] + self.distance[u][v]
                 if cap_now + d <= self.capacity and (min_ratio > d / sc or best_pos == -1):
                     min_ratio = d / sc
@@ -148,14 +153,20 @@ class CarpProblem:
             best_pos = self.strategy(cap_now, task_now, pos_now, int(cap_now * 2 < self.capacity))
         return best_pos
 
-    def calc_cost(self, individual):  # only used for testing
+    def calc_cost(self, routes):
         cost = 0
-        for route in individual[0]:
-            for i in range(len(route)):
+        for route in routes:
+            for i in range(len(route) - 1):
                 # DON'T DELETE THIS COMMENT
                 # cost += self.distance[route[i - 1][1]][route[i][0]] +\
                 #         self.distance[route[i][0]][route[i][1]]
-                cost += self.distance[route[i - 1][1]][route[i][0]]
+
+                # before constant improvement
+                # cost += self.distance[route[i - 1][1]][route[i][0]]
+
+                _, last_v, _ = self.get_task(route[i])
+                next_u, _, _ = self.get_task(route[i+1])
+                cost += self.distance[last_v][next_u]
         # return cost
         return cost + self.total_req_cost
         # Commented method is WRONG!!! Demanded edge (u, v) may be longer than distance[u][v].
@@ -166,10 +177,14 @@ class CarpProblem:
     """
 
     def cost_right(self, routes, a, b):
-        return self.distance[routes[a][b][1]][routes[a][(b + 1) % len(routes[a])][0]]
+        _, last_v, _ = self.get_task(routes[a][b])
+        next_u, _, _ = self.get_task(routes[a][b+1])
+        return self.distance[last_v][next_u]
 
     def cost_left(self, routes, a, b):
-        return self.distance[routes[a][b - 1][1]][routes[a][b][0]]
+        _, last_v, _ = self.get_task(routes[a][b-1])
+        next_u, _, _ = self.get_task(routes[a][b])
+        return self.distance[last_v][next_u]
 
     def cost_both(self, routes, a, b):
         return self.cost_left(routes, a, b) + self.cost_right(routes, a, b)
@@ -177,15 +192,15 @@ class CarpProblem:
     def random_task(self, routes):
         random_id = np.random.randint(self.req_edge)
         for i, route in enumerate(routes):
-            if random_id >= len(route) - 1:
-                random_id -= len(route) - 1
+            if random_id >= len(route) - 2:
+                random_id -= len(route) - 2
             else:
                 return i, random_id + 1
 
     def route_test_failed(self, route):
         demand_sum = 0
-        for task in route:
-            demand_sum += task[2]
+        for id in route:
+            demand_sum += self.task[abs(id)][2]
         return demand_sum > self.capacity
 
     def mutation(self, individual, mutation_id):
@@ -194,38 +209,39 @@ class CarpProblem:
         if mutation_id == 0:  # flip
             a, b = self.random_task(routes)
             cost -= self.cost_both(routes, a, b)
-            routes[a][b] = triple_flip(routes[a][b])
+            # routes[a][b] = triple_flip(routes[a][b])
+            routes[a][b] = -routes[a][b]
             cost += self.cost_both(routes, a, b)
         if mutation_id == 1:  # double insertion
             a, b = self.random_task(routes)
             c, d = self.random_task(routes)
-            if b + 1 == len(routes[a]) or a == c:
+            if b + 2 == len(routes[a]) or a == c:
                 mutation_id = 2  # the next task is init_task or inserted to wrong positions
             else:
                 cost -= self.cost_left(routes, a, b) + \
-                        self.cost_right(routes, a, b + 1) + \
+                        self.cost_right(routes, a, b+1) + \
                         self.cost_right(routes, c, d)
                 task_a1 = routes[a].pop(b)
                 task_a2 = routes[a].pop(b)
                 routes[c].insert(d + 1, task_a2)
                 routes[c].insert(d + 1, task_a1)
-                cost += self.cost_right(routes, a, b - 1) + \
-                        self.cost_left(routes, c, d + 1) + \
-                        self.cost_right(routes, c, d + 2)
+                cost += self.cost_right(routes, a, b-1) + \
+                        self.cost_left(routes, c, d+1) + \
+                        self.cost_right(routes, c, d+2)
                 if self.route_test_failed(routes[a]) or self.route_test_failed(routes[c]):
                     return None
         if mutation_id == 2:  # single insertion
             a, b = self.random_task(routes)
             c, d = self.random_task(routes)
-            if b + 1 == len(routes[a]) or a == c:
+            if b + 2 == len(routes[a]) or a == c:
                 mutation_id = 3  # the next task is init_task or inserted to wrong positions
             else:
-                cost -= self.cost_both(routes, a, b) + \
+                cost -= self.cost_both(routes,a, b) + \
                         self.cost_right(routes, c, d)
                 task_a = routes[a].pop(b)
                 routes[c].insert(d + 1, task_a)
-                cost += self.cost_right(routes, a, b - 1) + \
-                        self.cost_both(routes, c, d + 1)
+                cost += self.cost_right(routes, a, b-1) + \
+                        self.cost_both(routes, c, d+1)
                 if self.route_test_failed(routes[a]) or self.route_test_failed(routes[c]):
                     return None
         if mutation_id == 3:  # swap
@@ -250,8 +266,8 @@ class CarpProblem:
                 cost -= self.cost_left(routes, a, b) + \
                         self.cost_left(routes, c, d)
                 routes[a], routes[c] = routes[a][:b] + routes[c][d:], routes[c][:d] + routes[a][b:]
-                cost += self.cost_right(routes, a, b - 1) + \
-                        self.cost_right(routes, c, d - 1)
+                cost += self.cost_right(routes, a, b-1) + \
+                        self.cost_right(routes, c, d-1)
                 if self.route_test_failed(routes[a]) or self.route_test_failed(routes[c]):
                     return None
         if mutation_id == 5:  # 2-opt for double route (plan 2)
@@ -262,37 +278,39 @@ class CarpProblem:
             else:
                 cost -= self.cost_left(routes, a, b) + \
                         self.cost_right(routes, c, d)
-                for i in range(b, len(routes[a])):
-                    routes[a][i] = triple_flip(routes[a][i])
-                for i in range(1, d+1):
-                    routes[c][i] = triple_flip(routes[c][i])
                 len_a = len(routes[a])
-                routes[a], routes[c] = \
-                    routes[a][:b] + routes[c][d:0:-1], \
-                    [routes[c][0]] + routes[a][:b-1:-1] + routes[c][d+1:]
-                cost += self.cost_right(routes, a, b - 1) + \
-                        self.cost_right(routes, c, len_a - b)
+                for i in range(b, len_a-1):
+                    # routes[a][i] = triple_flip(routes[a][i])
+                    routes[a][i] = -routes[a][i]
+                for i in range(1, d+1):
+                    # routes[c][i] = triple_flip(routes[c][i])
+                    routes[c][i] = -routes[c][i]
+                routes[a], routes[c] = routes[a][:b] + routes[c][d::-1], routes[a][:b-1:-1] + routes[c][d+1:]
+                cost += self.cost_left(routes, a, b) + \
+                        self.cost_right(routes, c, len_a-b-1)
                 if self.route_test_failed(routes[a]) or self.route_test_failed(routes[c]):
                     return None
         if mutation_id == 6:  # 2-opt for single route (segment reverse)
             a, b = self.random_task(routes)
-            c = np.random.randint(len(routes[a]) - 1) + 1
-            if b > c:
-                b, c = c, b
+            c = np.random.randint(len(routes[a]) - 2) + 1
+            b, c = min(b, c), max(b, c)
             cost -= self.cost_left(routes, a, b) + \
                     self.cost_right(routes, a, c)
             routes[a][b:c+1] = routes[a][c:b-1:-1]  # segment reverse
             for i in range(b, c + 1):
-                routes[a][i] = triple_flip(routes[a][i])
+                # routes[a][i] = triple_flip(routes[a][i])
+                routes[a][i] = -routes[a][i]
             cost += self.cost_left(routes, a, b) + \
                     self.cost_right(routes, a, c)
         return routes, cost
 
     """
         individual = (list of routes, cost)
-            len(list of routes) = self.card
-        route = [init_task, task1, task2, ...]
-            (recall task = (u, v, d), init_task = (self.depot, self.depot, 0))
+            len(list of routes) = self.car
+        ~~route = [init_task, task1, task2, ...]~~
+            ~~(recall task = (u, v, d), init_task = (self.depot, self.depot, 0))~~
+        route = [0, task1_id, task2_id, ..., 0]
+            id > 0 -> (u, v, d), id < 0 -> (v, u, d) 
     """
 
     def init_population(self, pop_size):
@@ -300,13 +318,12 @@ class CarpProblem:
         STRATEGY_NUM = 5
         for i in range(pop_size):
             routes = []
-            task_now = copy.deepcopy(self.task)
-            random.shuffle(task_now)
+            task_now = [i + 1 for i in range(self.req_edge)]
             for j in range(self.req_edge):
                 if np.random.randint(2):
-                    task_now[j] = triple_flip(task_now[j])
+                    task_now[j] = -task_now[j]
             for j in range(self.car):
-                route = [(self.depot, self.depot, 0)]
+                route = [0]
                 cap_now = 0
                 pos_now = self.depot
                 while True:
@@ -315,11 +332,13 @@ class CarpProblem:
                         break
                     best_task = task_now.pop(best_pos)
                     route.append(best_task)
-                    cap_now += best_task[2]
-                    pos_now = best_task[1]
+                    u, v, d = self.get_task(best_task)
+                    cap_now += d
+                    pos_now = v
+                route.append(0)
                 routes.append(route)
             if len(task_now) == 0:
-                population.append((routes, self.calc_cost((routes, 0))))
+                population.append((routes, self.calc_cost(routes)))
         return population
 
     def main(self):  # solve the problem
@@ -337,7 +356,7 @@ class CarpProblem:
             cost_history = []
             if TEST_MODE:
                 round_cnt += 1
-                print("%d round begin here." % round_cnt)
+                print("round %d begins here." % round_cnt)
                 print("init_population in %f s" % init_time)
 
             # evolution
@@ -345,17 +364,17 @@ class CarpProblem:
                 phase_begin_time = time.time()
                 if TEST_MODE:
                     for individual in population:
-                        if self.calc_cost(individual) != individual[1]:
+                        if self.calc_cost(individual[0]) != individual[1]:
                             print("wrong cost")
                             print(individual)
-                        if total_length(individual) != self.car + self.req_edge:
+                        if total_length(individual) != self.car + self.car + self.req_edge:
                             print("wrong task number")
                             print(individual)
 
                 # generate new population
                 new_population = [] + population
                 for individual in population:
-                    MUTATION_NUM = 8
+                    MUTATION_NUM = 7
                     for i in range(MUTATION_NUM):
                         new_individual = self.mutation(individual, i)
                         if new_individual is not None:
@@ -388,13 +407,15 @@ class CarpProblem:
         # output
         plan_output = ''
         for route in best_individual[0]:
-            if len(route) == 1:
+            if len(route) == 2:
                 continue
             if len(plan_output) != 0:
                 plan_output += ','
             plan_output += '0'
-            for task in route[1:]:
-                plan_output += str(',(%d,%d)' % (task[0] + 1, task[1] + 1))
+            for task in route:
+                if task:
+                    u, v, _ = self.get_task(task)
+                    plan_output += str(',(%d,%d)' % (u + 1, v + 1))
             plan_output += ',0'
         print('s', plan_output)
         print('q', best_individual[1])
