@@ -2,9 +2,11 @@ import copy
 import numpy as np
 import sys
 import time
+# import threading
 
 STRATEGY_NUM = 5
 MUTATION_NUM = 7
+MAX_WORKER = 8
 
 TEST_MODE = 0
 
@@ -35,7 +37,8 @@ class CarpProblem:
         # input
         self.begin_time = time.time()
         file = open(argv[0], 'r')
-        self.time_limit = self.begin_time + (int(argv[2]) - 2)
+        self.time_out = int(argv[2]) - 2
+        self.time_limit = self.begin_time + self.time_out
         self.random_seed = argv[4]
         read_table = dict()
         for i in range(8):
@@ -336,7 +339,7 @@ class CarpProblem:
                 population.append((routes, self.calc_cost(routes)))
         return population
 
-    def main(self):  # solve the problem
+    def get_best_individual(self):  # solve the problem
         phase_num = 0
         phase_time = 0
         init_time = 0
@@ -397,6 +400,39 @@ class CarpProblem:
             best_individual_this_round = population[0]
             if best_individual is None or best_individual[1] > best_individual_this_round[1]:
                 best_individual = best_individual_this_round
+        return best_individual
+
+    # reference: https://blog.csdn.net/Liquor6/article/details/123206231
+    # class MyThread(threading.Thread):
+    #     def __init__(self, func, args=()):
+    #         super().__init__()
+    #         self.func = func
+    #         self.args = args
+    #         self.result = None
+    #
+    #     def run(self):
+    #         self.result = self.func(*self.args)
+    #
+    #     def get_result(self):
+    #         return self.result
+
+    def main(self):
+        # multiprocess
+        # best_individual = None
+        # threads = []
+        # for i in range(MAX_WORKER):
+        #     new_thread = self.MyThread(self.get_best_individual)
+        #     new_thread.start()
+        #     threads.append(new_thread)
+        # for thread in threads:
+        #     thread.join(timeout=self.time_out + 0.5)
+        # for thread in threads:
+        #     best_individual_this_round = thread.get_result()
+        #     if best_individual is None or best_individual[1] > best_individual_this_round[1]:
+        #         best_individual = best_individual_this_round
+
+        # single process is better
+        best_individual = self.get_best_individual()
 
         # output
         plan_output = ''
@@ -416,7 +452,11 @@ class CarpProblem:
 
 
 if __name__ == "__main__":
+    begin_time = time.time()
     CarpProblem(sys.argv[1:]).main()
+    end_time = time.time()
+    if TEST_MODE:
+        print("total time %f s" % (end_time - begin_time))
     """
         example test:
         python CARP_solver.py sample0.dat -t 5 -s 0
