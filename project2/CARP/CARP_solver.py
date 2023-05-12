@@ -332,7 +332,7 @@ class CarpProblem:
                     pos_now = v
                 route.append(0)
                 routes.append(route)
-            if len(task_now):
+            if len(task_now) == 0:
                 population.append((routes, self.calc_cost(routes)))
         return population
 
