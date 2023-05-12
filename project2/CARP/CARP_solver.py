@@ -2,12 +2,14 @@ import copy
 import numpy as np
 import sys
 import time
-import random
 
-TEST_MODE = 1
+STRATEGY_NUM = 5
+MUTATION_NUM = 7
+
+TEST_MODE = 0
 
 
-def read_int(string, begin):
+def read_int(string, begin):  # very stupid function
     p = 0
     while not str(string[begin]).isdigit():
         begin += 1
@@ -26,10 +28,6 @@ def total_length(individual):  # only for testing
     for route in individual[0]:
         length += len(route)
     return length
-
-
-def triple_flip(a):  # (p, q, r) <- (q, p, r)
-    return a[1], a[0], a[2]
 
 
 class CarpProblem:
@@ -61,6 +59,7 @@ class CarpProblem:
             self.distance[i][i] = 0
         self.task = [(self.depot, self.depot, 0)]
         for i in range(self.edge):
+            # very stupid and ugly input
             string = file.readline() + '\0'
             u, begin = read_int(string, 0)
             v, begin = read_int(string, begin)
@@ -161,7 +160,7 @@ class CarpProblem:
                 # cost += self.distance[route[i - 1][1]][route[i][0]] +\
                 #         self.distance[route[i][0]][route[i][1]]
 
-                # before constant improvement
+                # Before constant improvement
                 # cost += self.distance[route[i - 1][1]][route[i][0]]
 
                 _, last_v, _ = self.get_task(route[i])
@@ -185,6 +184,7 @@ class CarpProblem:
         _, last_v, _ = self.get_task(routes[a][b-1])
         next_u, _, _ = self.get_task(routes[a][b])
         return self.distance[last_v][next_u]
+        # one of this and cost_right is enough, but I don't want to change anymore...
 
     def cost_both(self, routes, a, b):
         return self.cost_left(routes, a, b) + self.cost_right(routes, a, b)
@@ -209,7 +209,6 @@ class CarpProblem:
         if mutation_id == 0:  # flip
             a, b = self.random_task(routes)
             cost -= self.cost_both(routes, a, b)
-            # routes[a][b] = triple_flip(routes[a][b])
             routes[a][b] = -routes[a][b]
             cost += self.cost_both(routes, a, b)
         if mutation_id == 1:  # double insertion
@@ -236,7 +235,7 @@ class CarpProblem:
             if b + 2 == len(routes[a]) or a == c:
                 mutation_id = 3  # the next task is init_task or inserted to wrong positions
             else:
-                cost -= self.cost_both(routes,a, b) + \
+                cost -= self.cost_both(routes, a, b) + \
                         self.cost_right(routes, c, d)
                 task_a = routes[a].pop(b)
                 routes[c].insert(d + 1, task_a)
@@ -280,10 +279,8 @@ class CarpProblem:
                         self.cost_right(routes, c, d)
                 len_a = len(routes[a])
                 for i in range(b, len_a-1):
-                    # routes[a][i] = triple_flip(routes[a][i])
                     routes[a][i] = -routes[a][i]
                 for i in range(1, d+1):
-                    # routes[c][i] = triple_flip(routes[c][i])
                     routes[c][i] = -routes[c][i]
                 routes[a], routes[c] = routes[a][:b] + routes[c][d::-1], routes[a][:b-1:-1] + routes[c][d+1:]
                 cost += self.cost_left(routes, a, b) + \
@@ -298,7 +295,6 @@ class CarpProblem:
                     self.cost_right(routes, a, c)
             routes[a][b:c+1] = routes[a][c:b-1:-1]  # segment reverse
             for i in range(b, c + 1):
-                # routes[a][i] = triple_flip(routes[a][i])
                 routes[a][i] = -routes[a][i]
             cost += self.cost_left(routes, a, b) + \
                     self.cost_right(routes, a, c)
@@ -315,7 +311,6 @@ class CarpProblem:
 
     def init_population(self, pop_size):
         population = []
-        STRATEGY_NUM = 5
         for i in range(pop_size):
             routes = []
             task_now = [i + 1 for i in range(self.req_edge)]
@@ -337,7 +332,7 @@ class CarpProblem:
                     pos_now = v
                 route.append(0)
                 routes.append(route)
-            if len(task_now) == 0:
+            if len(task_now):
                 population.append((routes, self.calc_cost(routes)))
         return population
 
@@ -350,7 +345,7 @@ class CarpProblem:
         while time.time() + init_time < self.time_limit:
             # init population
             init_begin_time = time.time()
-            pop_size = max(100, min(10, int(10000 / self.node)))  # need a better number here
+            pop_size = 100
             population = self.init_population(pop_size)  # init population
             init_time = time.time() - init_begin_time
             cost_history = []
@@ -374,7 +369,6 @@ class CarpProblem:
                 # generate new population
                 new_population = [] + population
                 for individual in population:
-                    MUTATION_NUM = 7
                     for i in range(MUTATION_NUM):
                         new_individual = self.mutation(individual, i)
                         if new_individual is not None:
@@ -409,7 +403,7 @@ class CarpProblem:
         for route in best_individual[0]:
             if len(route) == 2:
                 continue
-            if len(plan_output) != 0:
+            if len(plan_output):
                 plan_output += ','
             plan_output += '0'
             for task in route:
