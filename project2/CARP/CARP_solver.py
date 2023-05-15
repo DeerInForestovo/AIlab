@@ -4,10 +4,7 @@ import sys
 import time
 # import threading
 
-STRATEGY_NUM = 5
-MUTATION_NUM = 7
-MAX_WORKER = 8
-
+SYSTEM_TEST_MODE = 1
 TEST_MODE = 0
 
 
@@ -53,6 +50,8 @@ class CarpProblem:
         self.capacity = int(read_table['CAPACITY '])
         self.depot = int(read_table['DEPOT ']) - 1
         self.test_name = read_table['NAME ']
+        if SYSTEM_TEST_MODE:
+            print("test name: %s\n" % self.test_name)
         self.total_req_cost = int(read_table['TOTAL COST OF REQUIRED EDGES '])
         self.total_cost = 0
         self.edge = self.req_edge + self.free_edge
@@ -313,6 +312,7 @@ class CarpProblem:
     """
 
     def init_population(self, pop_size):
+        STRATEGY_NUM = 5
         population = []
         for i in range(pop_size):
             routes = []
@@ -371,6 +371,7 @@ class CarpProblem:
 
                 # generate new population
                 new_population = [] + population
+                MUTATION_NUM = 7
                 for individual in population:
                     for i in range(MUTATION_NUM):
                         new_individual = self.mutation(individual, i)
@@ -418,6 +419,7 @@ class CarpProblem:
 
     def main(self):
         # multiprocess
+        # MAX_WORKER = 8
         # best_individual = None
         # threads = []
         # for i in range(MAX_WORKER):
@@ -452,11 +454,20 @@ class CarpProblem:
 
 
 if __name__ == "__main__":
-    begin_time = time.time()
-    CarpProblem(sys.argv[1:]).main()
-    end_time = time.time()
-    if TEST_MODE:
-        print("total time %f s" % (end_time - begin_time))
+    if SYSTEM_TEST_MODE:
+        times = [10, 60, 120, 240]
+        for i in range(8):
+            name = 'sample' + str(i + 1) + '.dat'
+            for t in times:
+                print("%d s" % t)
+                CarpProblem([name, 0, t, 0, 0]).main()
+    else:
+        begin_time = time.time()
+        CarpProblem(sys.argv[1:]).main()
+        end_time = time.time()
+        if TEST_MODE:
+            print("total time %f s" % (end_time - begin_time))
+
     """
         example test:
         python CARP_solver.py sample0.dat -t 5 -s 0
