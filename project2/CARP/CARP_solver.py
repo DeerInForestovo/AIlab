@@ -4,9 +4,9 @@ import sys
 import time
 # import threading
 
-STRATEGY_NUM = 5
-MUTATION_NUM = 7
-MAX_WORKER = 8
+# STRATEGY_NUM = 5
+# MUTATION_NUM = 7
+# MAX_WORKER = 8
 
 TEST_MODE = 0
 
@@ -325,7 +325,7 @@ class CarpProblem:
                 cap_now = 0
                 pos_now = self.depot
                 while True:
-                    best_pos = self.strategy(cap_now, task_now, pos_now, i % STRATEGY_NUM)
+                    best_pos = self.strategy(cap_now, task_now, pos_now, i % 5)  # STRATEGY_NUM = 5
                     if best_pos == -1:
                         break
                     best_task = task_now.pop(best_pos)
@@ -372,7 +372,7 @@ class CarpProblem:
                 # generate new population
                 new_population = [] + population
                 for individual in population:
-                    for i in range(MUTATION_NUM):
+                    for i in range(8):  # MUTATION_NUM = 8
                         new_individual = self.mutation(individual, i)
                         if new_individual is not None:
                             new_population.append(new_individual)
@@ -431,7 +431,7 @@ class CarpProblem:
         #     if best_individual is None or best_individual[1] > best_individual_this_round[1]:
         #         best_individual = best_individual_this_round
 
-        # single process is better
+        # single process is better...
         best_individual = self.get_best_individual()
 
         # output
