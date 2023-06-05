@@ -25,8 +25,8 @@ def train(train_data, train_label, test_data, test_label, train_data_len, test_d
     loss_func = torch.nn.BCELoss()
     optimizer = torch.optim.Adam(net.parameters(), lr=0.00001)
 
-    EPOCH_SIZE = 1000
-    EPOCH_TOT = 5000
+    EPOCH_SIZE = 500
+    EPOCH_TOT = 1000
     for epoch in range(EPOCH_TOT):
         for _ in range(EPOCH_SIZE):
             # train
